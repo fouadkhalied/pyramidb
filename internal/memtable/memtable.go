@@ -1,6 +1,9 @@
 package memtable
 
-import "sync"
+import (
+	"lsmdb/internal/keys"
+	"sync"
+)
 
 // MemTable is the mutable write buffer in front of the on-disk SSTables.
 // It tracks approximate size so the engine knows when to flush it.
@@ -14,7 +17,7 @@ func New() *MemTable {
 	return &MemTable{list: NewSkipList(BytewiseCompare, 1)}
 }
 
-func (m *MemTable) Put(key, value []byte) {
+func (m *MemTable) Put(key []byte, seq uint64, kind keys.Kind, value []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if old, ok := m.list.Get(key); ok {
@@ -22,7 +25,8 @@ func (m *MemTable) Put(key, value []byte) {
 	} else {
 		m.size += len(key) + len(value)
 	}
-	m.list.Put(key, value)
+
+	m.list.Put(key, seq, kind, value)
 }
 
 func (m *MemTable) Get(key []byte) ([]byte, bool) {

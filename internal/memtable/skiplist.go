@@ -3,6 +3,7 @@ package memtable
 
 import (
 	"bytes"
+	"lsmdb/internal/keys"
 	"math/rand"
 )
 
@@ -19,10 +20,20 @@ type Compare func(a, b []byte) int
 // BytewiseCompare orders keys lexicographically.
 func BytewiseCompare(a, b []byte) int { return bytes.Compare(a, b) }
 
-type node struct {
-	key, value []byte
-	next       []*node // next[i] is this node's successor at level i
+type version struct {
+	seq  uint64
+	kind keys.Kind
+	val  []byte
 }
+
+type node struct {
+	key      []byte
+	versions []version // append-only; newest is last
+	next     []*node
+}
+
+// return the latest version
+func (n *node) latest() version { return n.versions[len(n.versions)-1] }
 
 // SkipList is a sorted map from []byte to []byte.
 // It is NOT safe for concurrent use; MemTable adds the locking.
@@ -76,17 +87,21 @@ func (s *SkipList) findGE(target []byte, prev []*node) *node {
 // Get returns the value for key.
 func (s *SkipList) Get(key []byte) ([]byte, bool) {
 	if n := s.findGE(key, nil); n != nil && s.cmp(n.key, key) == 0 {
-		return n.value, true
+		return n.latest().val, true
 	}
 	return nil, false
 }
 
 // Put inserts or overwrites key. It reports whether an existing key was replaced.
 // The list keeps its own copy of key and value.
-func (s *SkipList) Put(key, value []byte) (replaced bool) {
+func (s *SkipList) Put(key []byte, seq uint64, kind keys.Kind, value []byte) (replaced bool) {
 	var prev [maxHeight]*node
 	if n := s.findGE(key, prev[:]); n != nil && s.cmp(n.key, key) == 0 {
-		n.value = bytes.Clone(value)
+		n.versions = append(n.versions, version{
+			val:  bytes.Clone(value),
+			seq:  seq,
+			kind: kind,
+		})
 		return true
 	}
 
@@ -98,7 +113,17 @@ func (s *SkipList) Put(key, value []byte) (replaced bool) {
 		s.height = h
 	}
 
-	n := &node{key: bytes.Clone(key), value: bytes.Clone(value), next: make([]*node, h)}
+	n := &node{
+		key: bytes.Clone(key),
+
+		versions: []version{{
+			val:  bytes.Clone(value),
+			seq:  1,
+			kind: keys.KindSet,
+		}},
+
+		next: make([]*node, h)}
+
 	for level := 0; level < h; level++ {
 		n.next[level] = prev[level].next[level]
 		prev[level].next[level] = n
@@ -117,7 +142,7 @@ func (s *SkipList) NewIterator() *Iterator { return &Iterator{list: s} }
 
 func (it *Iterator) Valid() bool        { return it.cur != nil }
 func (it *Iterator) Key() []byte        { return it.cur.key }
-func (it *Iterator) Value() []byte      { return it.cur.value }
+func (it *Iterator) Value() []byte      { return it.cur.latest().val }
 func (it *Iterator) Next()              { it.cur = it.cur.next[0] }
 func (it *Iterator) SeekToFirst()       { it.cur = it.list.head.next[0] }
 func (it *Iterator) Seek(target []byte) { it.cur = it.list.findGE(target, nil) }
