@@ -5,16 +5,23 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
+
+	"lsmdb/internal/keys"
 )
+
+// set is a test helper: write a KindSet version of k at the given seq.
+func set(s *SkipList, seq uint64, k, v string) bool {
+	return s.Put([]byte(k), seq, keys.KindSet, []byte(v))
+}
 
 func TestSkipListPutGet(t *testing.T) {
 	s := NewSkipList(BytewiseCompare, 1)
 	if _, ok := s.Get([]byte("a")); ok {
 		t.Fatal("empty list should miss")
 	}
-	s.Put([]byte("b"), []byte("2"))
-	s.Put([]byte("a"), []byte("1"))
-	s.Put([]byte("c"), []byte("3"))
+	set(s, 1, "b", "2")
+	set(s, 2, "a", "1")
+	set(s, 3, "c", "3")
 	for k, want := range map[string]string{"a": "1", "b": "2", "c": "3"} {
 		got, ok := s.Get([]byte(k))
 		if !ok || string(got) != want {
@@ -26,19 +33,71 @@ func TestSkipListPutGet(t *testing.T) {
 	}
 }
 
-func TestSkipListOverwrite(t *testing.T) {
+func TestSkipListNewVersionSameKey(t *testing.T) {
 	s := NewSkipList(BytewiseCompare, 1)
-	if s.Put([]byte("k"), []byte("v1")) {
-		t.Fatal("first Put should not report replaced")
+	if set(s, 1, "k", "v1") {
+		t.Fatal("first Put should report existed=false")
 	}
-	if !s.Put([]byte("k"), []byte("v2")) {
-		t.Fatal("second Put should report replaced")
+	if !set(s, 2, "k", "v2") {
+		t.Fatal("second Put should report existed=true")
 	}
 	if got, _ := s.Get([]byte("k")); string(got) != "v2" {
-		t.Fatalf("got %q, want v2", got)
+		t.Fatalf("Get = %q, want v2", got)
 	}
 	if s.Len() != 1 {
-		t.Fatalf("Len = %d, want 1", s.Len())
+		t.Fatalf("Len = %d, want 1 distinct key", s.Len())
+	}
+	if n := s.findGE([]byte("k"), nil); len(n.versions) != 2 {
+		t.Fatalf("versions = %d, want 2 (old one must be kept)", len(n.versions))
+	}
+}
+
+func TestSkipListGetAt(t *testing.T) {
+	// The example from the lesson, written in global seq order.
+	s := NewSkipList(BytewiseCompare, 1)
+	set(s, 12, "user:1", "alice@v1")
+	set(s, 87, "user:1", "alice@v2")
+	set(s, 99, "user:2", "bob")
+	set(s, 105, "user:1", "alice@v3")
+
+	cases := []struct {
+		key  string
+		snap uint64
+		want string // "" means not visible
+	}{
+		{"user:1", 11, ""},
+		{"user:1", 12, "alice@v1"},
+		{"user:1", 86, "alice@v1"},
+		{"user:1", 90, "alice@v2"},
+		{"user:1", 200, "alice@v3"},
+		{"user:2", 90, ""}, // written at 99, after this snapshot
+		{"user:2", 99, "bob"},
+		{"user:3", 200, ""}, // never written
+	}
+	for _, c := range cases {
+		v, ok := s.GetAt([]byte(c.key), c.snap)
+		if c.want == "" {
+			if ok {
+				t.Fatalf("GetAt(%q, %d) = %q, want miss", c.key, c.snap, v.val)
+			}
+			continue
+		}
+		if !ok || string(v.val) != c.want {
+			t.Fatalf("GetAt(%q, %d) = %q, %v; want %q", c.key, c.snap, v.val, ok, c.want)
+		}
+	}
+}
+
+func TestSkipListDeleteVersion(t *testing.T) {
+	s := NewSkipList(BytewiseCompare, 1)
+	set(s, 10, "a", "v1")
+	s.Put([]byte("a"), 20, keys.KindDelete, nil)
+
+	if v, ok := s.GetAt([]byte("a"), 15); !ok || v.kind != keys.KindSet {
+		t.Fatalf("at snap 15 want the Set version, got %+v, %v", v, ok)
+	}
+	if v, ok := s.GetAt([]byte("a"), 25); !ok || v.kind != keys.KindDelete {
+		t.Fatalf("at snap 25 want the tombstone, got %+v, %v", v, ok)
 	}
 }
 
@@ -49,7 +108,7 @@ func TestSkipListSortedIteration(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		k := fmt.Sprintf("key-%04d", rnd.Intn(500))
 		seen[k] = true
-		s.Put([]byte(k), []byte("v"))
+		set(s, uint64(i+1), k, "v")
 	}
 	want := make([]string, 0, len(seen))
 	for k := range seen {
@@ -72,8 +131,8 @@ func TestSkipListSortedIteration(t *testing.T) {
 
 func TestSkipListSeek(t *testing.T) {
 	s := NewSkipList(BytewiseCompare, 1)
-	for _, k := range []string{"b", "d", "f"} {
-		s.Put([]byte(k), []byte(k))
+	for i, k := range []string{"b", "d", "f"} {
+		set(s, uint64(i+1), k, k)
 	}
 	it := s.NewIterator()
 	cases := []struct{ target, want string }{{"a", "b"}, {"c", "d"}, {"d", "d"}, {"e", "f"}}
