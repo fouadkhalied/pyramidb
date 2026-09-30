@@ -1,8 +1,8 @@
 package keys
 
 import (
-	"bytes"
 	"encoding/binary"
+	"hash/crc32"
 )
 
 type Kind uint8
@@ -13,32 +13,50 @@ const (
 	KindMax         = KindSet // highest kind, used when seeking
 )
 
-const trailerLen = 8
+const (
+	headerLen = 4 + 1 + 8 + 4 // crc + type + seq + klen
+	vlenLen   = 4
+)
 
-func Make(userKey []byte, seq uint64, kind Kind) []byte {
-	ikey := make([]byte, len(userKey)+trailerLen)
-	copy(ikey, userKey)
-	binary.LittleEndian.PutUint64(ikey[len(userKey):], seq<<8|uint64(kind))
-	return ikey
+func Encode(typ Kind, seq uint64, key, value []byte) []byte {
+	buf := make([]byte, headerLen+len(key)+vlenLen+len(value))
+	buf[4] = byte(typ)
+	binary.LittleEndian.PutUint64(buf[5:], seq)
+	binary.LittleEndian.PutUint32(buf[13:], uint32(len(key)))
+	copy(buf[headerLen:], key)
+	off := headerLen + len(key)
+	binary.LittleEndian.PutUint32(buf[off:], uint32(len(value)))
+	copy(buf[off+vlenLen:], value)
+	binary.LittleEndian.PutUint32(buf[:4], crc32.ChecksumIEEE(buf[4:])) // crc of everything after itself
+	return buf
 }
 
-func Parse(ikey []byte) (userKey []byte, seq uint64, kind Kind) {
-	n := len(ikey) - trailerLen
-	t := binary.LittleEndian.Uint64(ikey[n:])
-	return ikey[:n], t >> 8, Kind(t & 0xff)
-}
+// Decode reads one record from the start of data and returns the bytes it used.
+func Decode(data []byte) (typ Kind, seq uint64, key, value []byte, n int, err error) {
+	if len(data) < headerLen {
+		return 0, 0, nil, nil, 0, ErrCorrupt
+	}
 
-func Compare(a, b []byte) int {
-	if c := bytes.Compare(a[:len(a)-trailerLen], b[:len(b)-trailerLen]); c != 0 {
-		return c // different user keys: normal order
+	klen := int(binary.LittleEndian.Uint32(data[13:]))
+
+	if klen < 0 || len(data) < headerLen+klen+vlenLen {
+		return 0, 0, nil, nil, 0, ErrCorrupt
 	}
-	ta := binary.LittleEndian.Uint64(a[len(a)-trailerLen:])
-	tb := binary.LittleEndian.Uint64(b[len(b)-trailerLen:])
-	switch {
-	case ta > tb:
-		return -1 // newer write sorts first
-	case ta < tb:
-		return 1
+
+	off := headerLen + klen
+
+	vlen := int(binary.LittleEndian.Uint32(data[off:]))
+
+	n = off + vlenLen + vlen
+
+	if vlen < 0 || n > len(data) {
+		return 0, 0, nil, nil, 0, ErrCorrupt
 	}
-	return 0
+
+	if crc32.ChecksumIEEE(data[4:n]) != binary.LittleEndian.Uint32(data[:4]) {
+		return 0, 0, nil, nil, 0, ErrCorrupt
+	}
+
+	return Kind(data[4]), binary.LittleEndian.Uint64(data[5:]),
+		data[headerLen : headerLen+klen], data[off+vlenLen : n], n, nil
 }
