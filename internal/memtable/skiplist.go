@@ -132,6 +132,19 @@ func (s *SkipList) Put(key []byte, seq uint64, kind keys.Kind, value []byte) (re
 	return false
 }
 
+func (s *SkipList) GetAt(key []byte, snap uint64) (version, bool) {
+	n := s.findGE(key, nil)
+	if n == nil || s.cmp(n.key, key) != 0 {
+		return version{}, false
+	}
+	for i := len(n.versions) - 1; i >= 0; i-- { // newest first
+		if n.versions[i].seq <= snap {
+			return n.versions[i], true
+		}
+	}
+	return version{}, false
+}
+
 // Iterator walks the bottom level in key order.
 type Iterator struct {
 	list *SkipList
