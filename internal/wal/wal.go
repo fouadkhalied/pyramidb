@@ -20,3 +20,7 @@ func (w *Writer) Append(rec []byte) error {
 	}
 	return w.f.Sync() // the durability boundary
 }
+
+func (w *Writer) Close() error {
+	return w.f.Close()
+}
