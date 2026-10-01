@@ -29,10 +29,15 @@ func (m *MemTable) Put(key []byte, seq uint64, kind keys.Kind, value []byte) {
 	m.list.Put(key, seq, kind, value)
 }
 
-func (m *MemTable) Get(key []byte) ([]byte, bool) {
+func (m *MemTable) Get(key []byte, snap uint64) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.list.Get(key)
+	value, err := m.list.GetAt(key, snap)
+
+	if err != false {
+		return value.val, true
+	}
+	return nil, false
 }
 
 // ApproximateSize is what the engine compares against its flush threshold.
