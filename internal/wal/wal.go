@@ -18,9 +18,13 @@ func (w *Writer) Append(rec []byte) error {
 	if _, err := w.f.Write(rec); err != nil { // one Write for the whole record
 		return err
 	}
-	return w.f.Sync() // the durability boundary
+	return nil
 }
 
 func (w *Writer) Close() error {
 	return w.f.Close()
+}
+
+func (w *Writer) FSync() error {
+	return w.f.Sync()
 }
