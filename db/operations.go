@@ -32,5 +32,3 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	}
 	return v, nil
 }
-
-func (db *DB) Close() error { return db.wal.Close() }
