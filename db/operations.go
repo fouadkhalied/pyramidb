@@ -4,16 +4,20 @@ import "lsmdb/internal/keys"
 
 // Put follows the WAL protocol: seq, append + fsync, memtable, ack.
 func (db *DB) Put(key, value []byte) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	reply := make(chan error, 1)
 
+	db.mu.Lock()
 	db.seq++
-	rec := keys.Encode(keys.KindSet, db.seq, key, value)
-	if err := db.wal.Append(rec); err != nil {
-		return err
+	db.requests <- request{
+		seq:   db.seq,
+		rec:   keys.Encode(keys.KindSet, db.seq, key, value),
+		key:   key,
+		value: value,
+		reply: reply,
 	}
-	db.mem.Put(key, db.seq, keys.KindSet, value)
-	return nil
+	db.mu.Unlock() // queue order now matches seq order
+
+	return <-reply // wait here, outside the lock
 }
 
 // Get reads the newest value as of the latest sequence number.
