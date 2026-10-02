@@ -10,6 +10,7 @@ type request struct {
 }
 
 func (db *DB) writeLoop() {
+	defer close(db.done)
 	for first := range db.requests {
 		batch := []request{first}
 	drain:

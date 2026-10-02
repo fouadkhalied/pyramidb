@@ -15,7 +15,7 @@ func Open(dir string) (*DB, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db := &DB{dir: dir, mem: memtable.New()}
+	db := &DB{dir: dir, mem: memtable.New(), requests: make(chan request)}
 
 	if err := db.recover(); err != nil {
 		return nil, err
@@ -26,6 +26,10 @@ func Open(dir string) (*DB, error) {
 		return nil, err
 	}
 	db.wal = w
+
+	db.requests = make(chan request, 1024) // this DB's queue
+	db.done = make(chan struct{})
+	go db.writeLoop() // start only after recovery is finished
 	return db, nil
 }
 
@@ -60,4 +64,18 @@ func (db *DB) recover() error {
 		}
 	}
 	return nil
+}
+
+func (db *DB) Close() error {
+	db.mu.Lock()
+	if db.closed {
+		db.mu.Unlock()
+		return nil
+	}
+	db.closed = true
+	close(db.requests)
+	db.mu.Unlock()
+
+	<-db.done
+	return db.wal.Close()
 }
