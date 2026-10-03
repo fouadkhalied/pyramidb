@@ -18,6 +18,13 @@ const (
 	vlenLen   = 4
 )
 
+type Entry struct {
+	Key   []byte // user key
+	Seq   uint64
+	Kind  Kind
+	Value []byte
+}
+
 func Encode(typ Kind, seq uint64, key, value []byte) []byte {
 	buf := make([]byte, headerLen+len(key)+vlenLen+len(value))
 	buf[4] = byte(typ)
