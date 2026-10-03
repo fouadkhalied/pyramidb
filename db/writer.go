@@ -35,7 +35,11 @@ func (db *DB) writeLoop() {
 		if err == nil {
 			for _, r := range batch { // in order, only after the sync
 				db.mem.Put(r.key, r.seq, keys.KindSet, r.value)
+				// temporary load data to sstable
+				db.sst.Put(r.key, r.seq, keys.KindSet, r.value)
 			}
+			db.sst.Compact()
+
 		}
 		for _, r := range batch {
 			r.reply <- err

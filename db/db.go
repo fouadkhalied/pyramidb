@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"lsmdb/internal/memtable"
+	"lsmdb/internal/sstable"
 	"lsmdb/internal/wal"
 )
 
@@ -20,6 +21,7 @@ type DB struct {
 	closed   bool   // set by Close, checked by Put
 	wal      *wal.Writer
 	mem      *memtable.MemTable
+	sst      *sstable.SSTable
 	requests chan request  // this DB's queue of writes for the worker
 	done     chan struct{} // closed by the worker when it exits
 }

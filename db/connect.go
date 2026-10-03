@@ -7,6 +7,7 @@ import (
 
 	"lsmdb/internal/keys"
 	"lsmdb/internal/memtable"
+	"lsmdb/internal/sstable"
 	"lsmdb/internal/wal"
 )
 
@@ -15,11 +16,13 @@ func Open(dir string) (*DB, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db := &DB{dir: dir, mem: memtable.New(), requests: make(chan request)}
+	db := &DB{dir: dir, mem: memtable.New()}
 
 	if err := db.recover(); err != nil {
 		return nil, err
 	}
+
+	db.sst = sstable.Init()
 
 	w, err := wal.Open(filepath.Join(dir, fmt.Sprintf("%06d.log", db.seq+1)))
 	if err != nil {
