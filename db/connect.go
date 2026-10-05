@@ -16,7 +16,7 @@ func Open(dir string) (*DB, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db := &DB{dir: dir, mem: memtable.New()}
+	db := &DB{dir: dir, mem: memtable.New(), memLimit: keys.MaxMemTableSizeInBytes}
 
 	if err := db.recover(); err != nil {
 		return nil, err
