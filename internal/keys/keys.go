@@ -18,10 +18,10 @@ const (
 	vlenLen   = 4
 )
 
-type Entry struct {
-	Key   []byte // user key
-	Seq   uint64
-	Kind  Kind
+type Entry struct { // make it key and value only for now
+	Key []byte // user key
+	//Seq   uint64
+	//Kind  Kind
 	Value []byte
 }
 
