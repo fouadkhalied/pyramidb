@@ -8,9 +8,10 @@ import (
 type Kind uint8
 
 const (
-	KindDelete Kind = 0
-	KindSet    Kind = 1
-	KindMax         = KindSet // highest kind, used when seeking
+	KindDelete             Kind = 0
+	KindSet                Kind = 1
+	KindMax                     = KindSet // highest kind, used when seeking
+	MaxMemTableSizeInBytes      = 4 * 1024
 )
 
 const (

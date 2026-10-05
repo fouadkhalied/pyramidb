@@ -38,7 +38,7 @@ func (db *DB) writeLoop() {
 				db.mem.Put(r.key, r.seq, keys.KindSet, r.value)
 
 				// rotate if mem is filled
-				if db.mem.Size() >= db.memLimit {
+				if db.mem.Size() >= keys.MaxMemTableSizeInBytes {
 					db.rotate()
 				}
 			}
