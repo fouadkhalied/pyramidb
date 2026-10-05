@@ -26,9 +26,17 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	snap := db.seq
 	db.mu.Unlock()
 
-	v, ok := db.mem.Get(key, snap)
-	if !ok {
-		return nil, ErrNotFound
+	db.view.RLock()
+	mem, imm := db.mem, db.imm // one consistent view of the active + frozen memtables
+	db.view.RUnlock()
+
+	if v, ok := mem.Get(key, snap); ok { // newest first
+		return v, nil
 	}
-	return v, nil
+	for i := len(imm) - 1; i >= 0; i-- {
+		if v, ok := imm[i].Get(key, snap); ok {
+			return v, nil
+		}
+	}
+	return nil, ErrNotFound
 }

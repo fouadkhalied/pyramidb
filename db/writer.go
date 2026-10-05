@@ -33,12 +33,17 @@ func (db *DB) writeLoop() {
 			err = db.wal.FSync() // one fsync for the whole batch
 		}
 		if err == nil {
-			for _, r := range batch { // in order, only after the sync
+			for _, r := range batch {
+				// in order, only after the sync
 				db.mem.Put(r.key, r.seq, keys.KindSet, r.value)
-				// temporary load data to sstable
-				db.sst.Put(r.key, r.value)
+
+				// rotate if mem is filled
+				if db.mem.Size() >= db.memLimit {
+					db.rotate()
+				}
 			}
 		}
+
 		for _, r := range batch {
 			r.reply <- err
 		}

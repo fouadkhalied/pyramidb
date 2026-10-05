@@ -96,3 +96,33 @@ func TestDamagedOlderLogFailsOpen(t *testing.T) {
 		t.Fatal("Open should fail when an older log is damaged")
 	}
 }
+
+func TestRotationKeepsOldDataReadable(t *testing.T) {
+	d := mustOpen(t, t.TempDir())
+
+	keysIn := []string{"key-0", "key-1", "key-2", "key-3", "key-4"}
+	put := func(k string) {
+		if err := d.Put([]byte(k), []byte("value-"+k[4:])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(keysIn[0])
+	d.memLimit = 2 * d.mem.Size() // every entry costs the same, so every 2nd write rotates
+	for _, k := range keysIn[1:] {
+		put(k)
+	}
+	if len(d.imm) != 2 {
+		t.Fatalf("frozen memtables = %d, want 2", len(d.imm))
+	}
+	for _, k := range keysIn { // old data must still be visible
+		got, err := d.Get([]byte(k))
+		if err != nil || string(got) != "value-"+k[4:] {
+			t.Fatalf("Get(%q) = %q, %v", k, got, err)
+		}
+	}
+
+	_ = d.Put([]byte("key-0"), []byte("NEW")) // newer version beats the one in a frozen memtable
+	if got, _ := d.Get([]byte("key-0")); string(got) != "NEW" {
+		t.Fatalf("key-0 = %q, want NEW", got)
+	}
+}

@@ -15,13 +15,19 @@ var (
 )
 
 type DB struct {
-	mu       sync.Mutex // guards seq and closed, and keeps queue order == seq order
-	dir      string
-	seq      uint64 // global sequence counter
-	closed   bool   // set by Close, checked by Put
-	wal      *wal.Writer
+	mu     sync.Mutex // guards seq and closed, and keeps queue order == seq order
+	dir    string
+	seq    uint64 // global sequence counter
+	closed bool   // set by Close, checked by Put
+	wal    *wal.Writer
+	// mem structure
 	mem      *memtable.MemTable
+	view     sync.RWMutex         // guards mem and imm
+	imm      []*memtable.MemTable // frozen memtables, oldest first
+	memLimit int
+
 	sst      *sstable.SSTable
 	requests chan request  // this DB's queue of writes for the worker
 	done     chan struct{} // closed by the worker when it exits
+
 }

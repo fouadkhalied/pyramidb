@@ -36,6 +36,15 @@ func Open(dir string) (*DB, error) {
 	return db, nil
 }
 
+// rotate freeze the db since a mem has been filled up
+func (db *DB) rotate() {
+	db.view.Lock()
+	defer db.view.Unlock()
+
+	db.imm = append(db.imm, db.mem)
+	db.mem = memtable.New()
+}
+
 // recover replays every log, oldest first, and trims a torn tail on the newest one.
 func (db *DB) recover() error {
 	files, err := wal.ListLogs(db.dir)
