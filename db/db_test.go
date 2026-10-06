@@ -2,8 +2,12 @@ package db
 
 import (
 	"errors"
+	"fmt"
+	"lsmdb/internal/keys"
+	"lsmdb/internal/wal"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -124,5 +128,122 @@ func TestRotationKeepsOldDataReadable(t *testing.T) {
 	_ = d.Put([]byte("key-0"), []byte("NEW")) // newer version beats the one in a frozen memtable
 	if got, _ := d.Get([]byte("key-0")); string(got) != "NEW" {
 		t.Fatalf("key-0 = %q, want NEW", got)
+	}
+}
+
+// countRecords returns how many records a log file holds.
+// logKeys returns the keys of every record in a log file, in order.
+func logKeys(t *testing.T, path string) []string {
+	t.Helper()
+	var out []string
+	_, _, err := wal.Replay(path, func(_ keys.Kind, _ uint64, key, _ []byte) {
+		out = append(out, string(key))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestRotationStartsNewLog(t *testing.T) {
+	dir := t.TempDir()
+	d := mustOpen(t, dir)
+	d.memLimit = 1 // the very first write fills the memtable
+
+	if err := d.Put([]byte("a"), []byte("1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.imm) != 1 {
+		t.Fatalf("frozen memtables = %d, want 1", len(d.imm))
+	}
+	oldPath, newPath := d.imm[0].walPath, d.wal.GetWriterPath()
+	if oldPath == newPath {
+		t.Fatalf("new log reuses the old log's name: %s", oldPath)
+	}
+	if logs, _ := wal.ListLogs(dir); len(logs) != 2 {
+		t.Fatalf("log files = %d, want 2", len(logs))
+	}
+	if got := logKeys(t, oldPath); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("old log holds %v, want [a]", got)
+	}
+	if got := logKeys(t, newPath); len(got) != 0 {
+		t.Fatalf("new log should be empty, holds %v", got)
+	}
+
+	// Writes after the rotation must reach the NEW log (a closed writer would fail here).
+	if err := d.Put([]byte("b"), []byte("2")); err != nil {
+		t.Fatal(err)
+	}
+	if got := logKeys(t, d.imm[len(d.imm)-1].walPath); len(got) != 1 {
+		t.Fatalf("second frozen log holds %v, want exactly [b]", got)
+	}
+}
+
+func TestReopenAfterSeveralRotations(t *testing.T) {
+	dir := t.TempDir()
+	d := mustOpen(t, dir)
+	d.memLimit = 1 // every write rotates
+
+	const n = 6
+	for i := 0; i < n; i++ {
+		if err := d.Put([]byte(fmt.Sprintf("k%d", i)), []byte(fmt.Sprintf("v%d", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(d.imm) != n {
+		t.Fatalf("frozen memtables = %d, want %d", len(d.imm), n)
+	}
+	d.Close()
+
+	d = mustOpen(t, dir)
+	for i := 0; i < n; i++ {
+		got, err := d.Get([]byte(fmt.Sprintf("k%d", i)))
+		if err != nil || string(got) != fmt.Sprintf("v%d", i) {
+			t.Fatalf("k%d = %q, %v", i, got, err)
+		}
+	}
+	if d.seq != n {
+		t.Fatalf("seq = %d, want %d", d.seq, n)
+	}
+}
+
+// Under concurrent writes, batches form. Each log must still hold exactly the
+func TestEachLogMatchesItsMemtableUnderLoad(t *testing.T) {
+	d := mustOpen(t, t.TempDir())
+	d.memLimit = 300
+
+	const writers, perWriter = 20, 25
+	var wg sync.WaitGroup
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < perWriter; i++ {
+				k := []byte(fmt.Sprintf("w%02d-%02d", w, i))
+				if err := d.Put(k, []byte("value")); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	if len(d.imm) < 3 {
+		t.Fatalf("only %d rotations; the test should force many", len(d.imm))
+	}
+	total := 0
+	for i, f := range d.imm {
+		if got, want := len(logKeys(t, f.walPath)), f.mem.Len(); got != want {
+			t.Fatalf("frozen %d: log has %d records but its memtable has %d keys", i, got, want)
+		}
+		total += f.mem.Len()
+	}
+	if got, want := len(logKeys(t, d.wal.GetWriterPath())), d.mem.Len(); got != want {
+		t.Fatalf("active: log has %d records but memtable has %d keys", got, want)
+	}
+	total += d.mem.Len()
+	if total != writers*perWriter {
+		t.Fatalf("total keys = %d, want %d", total, writers*perWriter)
 	}
 }

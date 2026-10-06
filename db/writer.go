@@ -33,14 +33,15 @@ func (db *DB) writeLoop() {
 			err = db.wal.FSync() // one fsync for the whole batch
 		}
 		if err == nil {
-			for _, r := range batch {
-				// in order, only after the sync
+			for _, r := range batch { // in order, only after the sync
 				db.mem.Put(r.key, r.seq, keys.KindSet, r.value)
+			}
 
-				// rotate if mem is filled
-				if db.mem.Size() >= db.memLimit {
-					db.rotate()
-				}
+			// Check once, after the WHOLE batch: a log and its memtable must
+			if db.mem.Size() >= db.memLimit {
+
+				// next batch will try again. The writes above are already durable.
+				_ = db.rotate(batch[len(batch)-1].seq + 1)
 			}
 		}
 

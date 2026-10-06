@@ -36,13 +36,26 @@ func Open(dir string) (*DB, error) {
 	return db, nil
 }
 
-// rotate freeze the db since a mem has been filled up
-func (db *DB) rotate() {
-	db.view.Lock()
-	defer db.view.Unlock()
+// rotate freezes the full memtable and starts a new memtable with a new log.
+// nextSeq must be (last seq of the batch just applied) + 1, so the new log's
+func (db *DB) rotate(nextSeq uint64) error {
+	// 1. Everything that can fail goes first. If it fails, nothing has changed.
+	w, err := wal.Open(filepath.Join(db.dir, fmt.Sprintf("%06d.log", nextSeq)))
+	if err != nil {
+		return err
+	}
 
-	db.imm = append(db.imm, db.mem)
+	// 2. Swap all the state together, holding the lock only for pointer changes.
+	db.view.Lock()
+	old := db.wal
+	db.imm = append(db.imm, frozenMem{mem: db.mem, walPath: old.GetWriterPath()})
 	db.mem = memtable.New()
+	db.wal = w
+	db.view.Unlock()
+
+	// 3. Close the old log last. It was fsynced before this batch was applied,
+	// so nothing is lost; a close error cannot undo a rotation that worked.
+	return old.Close()
 }
 
 // recover replays every log, oldest first, and trims a torn tail on the newest one.

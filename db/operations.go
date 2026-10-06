@@ -34,7 +34,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return v, nil
 	}
 	for i := len(imm) - 1; i >= 0; i-- {
-		if v, ok := imm[i].Get(key, snap); ok {
+		if v, ok := imm[i].mem.Get(key, snap); ok {
 			return v, nil
 		}
 	}

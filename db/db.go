@@ -2,10 +2,10 @@ package db
 
 import (
 	"errors"
+	"lsmdb/internal/sstable"
 	"sync"
 
 	"lsmdb/internal/memtable"
-	"lsmdb/internal/sstable"
 	"lsmdb/internal/wal"
 )
 
@@ -14,20 +14,26 @@ var (
 	ErrClosed   = errors.New("db: closed")
 )
 
+// frozenMem is a full memtable together with the log that holds exactly its records.
+type frozenMem struct {
+	mem     *memtable.MemTable
+	walPath string
+}
+
 type DB struct {
 	mu     sync.Mutex // guards seq and closed, and keeps queue order == seq order
 	dir    string
-	seq    uint64 // global sequence counter
-	closed bool   // set by Close, checked by Put
-	wal    *wal.Writer
-	// mem structure
+	seq    uint64
+	closed bool
+
+	wal *wal.Writer // only the write worker uses it (and Close, after the worker exits)
+
 	mem      *memtable.MemTable
-	view     sync.RWMutex         // guards mem and imm
-	imm      []*memtable.MemTable // frozen memtables, oldest first
+	view     sync.RWMutex // guards mem and imm
+	imm      []frozenMem  // frozen memtables, oldest first
 	memLimit int
 
 	sst      *sstable.SSTable
-	requests chan request  // this DB's queue of writes for the worker
-	done     chan struct{} // closed by the worker when it exits
-
+	requests chan request
+	done     chan struct{}
 }
