@@ -14,6 +14,10 @@ func Open(path string) (*Writer, error) {
 	return &Writer{f: f}, nil
 }
 
+func (w *Writer) GetWriterPath() string {
+	return w.f.Name()
+}
+
 func (w *Writer) Append(rec []byte) error {
 	if _, err := w.f.Write(rec); err != nil { // one Write for the whole record
 		return err
