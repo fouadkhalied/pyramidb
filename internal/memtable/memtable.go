@@ -1,7 +1,7 @@
 package memtable
 
 import (
-	"lsmdb/internal/keys"
+	"lsmdb/internal/config"
 	"sync"
 	"unsafe"
 )
@@ -23,7 +23,7 @@ func New() *MemTable {
 	return &MemTable{list: NewSkipList(BytewiseCompare, 1)}
 }
 
-func (m *MemTable) Put(key []byte, seq uint64, kind keys.Kind, value []byte) {
+func (m *MemTable) Put(key []byte, seq uint64, kind config.Kind, value []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	existed := m.list.Put(key, seq, kind, value)
@@ -38,7 +38,7 @@ func (m *MemTable) Get(key []byte, snap uint64) ([]byte, bool) {
 	defer m.mu.RUnlock()
 
 	v, ok := m.list.GetAt(key, snap)
-	if !ok || v.kind != keys.KindSet { // a tombstone counts as "not found"
+	if !ok || v.kind != config.KindSet { // a tombstone counts as "not found"
 		return nil, false
 	}
 	return v.val, true

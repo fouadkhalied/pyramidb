@@ -6,12 +6,12 @@ import (
 	"sort"
 	"testing"
 
-	"lsmdb/internal/keys"
+	"lsmdb/internal/config"
 )
 
 // set is a test helper: write a KindSet version of k at the given seq.
 func set(s *SkipList, seq uint64, k, v string) bool {
-	return s.Put([]byte(k), seq, keys.KindSet, []byte(v))
+	return s.Put([]byte(k), seq, config.KindSet, []byte(v))
 }
 
 func TestSkipListPutGet(t *testing.T) {
@@ -91,12 +91,12 @@ func TestSkipListGetAt(t *testing.T) {
 func TestSkipListDeleteVersion(t *testing.T) {
 	s := NewSkipList(BytewiseCompare, 1)
 	set(s, 10, "a", "v1")
-	s.Put([]byte("a"), 20, keys.KindDelete, nil)
+	s.Put([]byte("a"), 20, config.KindDelete, nil)
 
-	if v, ok := s.GetAt([]byte("a"), 15); !ok || v.kind != keys.KindSet {
+	if v, ok := s.GetAt([]byte("a"), 15); !ok || v.kind != config.KindSet {
 		t.Fatalf("at snap 15 want the Set version, got %+v, %v", v, ok)
 	}
-	if v, ok := s.GetAt([]byte("a"), 25); !ok || v.kind != keys.KindDelete {
+	if v, ok := s.GetAt([]byte("a"), 25); !ok || v.kind != config.KindDelete {
 		t.Fatalf("at snap 25 want the tombstone, got %+v, %v", v, ok)
 	}
 }

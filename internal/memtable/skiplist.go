@@ -3,7 +3,7 @@ package memtable
 
 import (
 	"bytes"
-	"lsmdb/internal/keys"
+	"lsmdb/internal/config"
 	"math/rand"
 )
 
@@ -17,12 +17,12 @@ const (
 // comparator (user key asc, sequence number desc) when we reach MVCC.
 type Compare func(a, b []byte) int
 
-// BytewiseCompare orders keys lexicographically.
+// BytewiseCompare orders config lexicographically.
 func BytewiseCompare(a, b []byte) int { return bytes.Compare(a, b) }
 
 type version struct {
 	seq  uint64
-	kind keys.Kind
+	kind config.Kind
 	val  []byte
 }
 
@@ -56,7 +56,7 @@ func NewSkipList(cmp Compare, seed int64) *SkipList {
 	}
 }
 
-// Len returns the number of distinct keys.
+// Len returns the number of distinct config.
 func (s *SkipList) Len() int { return s.length }
 
 // randomHeight flips a biased coin: height h has probability (1/4)^(h-1).
@@ -94,7 +94,7 @@ func (s *SkipList) Get(key []byte) ([]byte, bool) {
 
 // Put inserts or overwrites key. It reports whether an existing key was replaced.
 // The list keeps its own copy of key and value.
-func (s *SkipList) Put(key []byte, seq uint64, kind keys.Kind, value []byte) (replaced bool) {
+func (s *SkipList) Put(key []byte, seq uint64, kind config.Kind, value []byte) (replaced bool) {
 	var prev [maxHeight]*node
 	if n := s.findGE(key, prev[:]); n != nil && s.cmp(n.key, key) == 0 {
 		n.versions = append(n.versions, version{
@@ -119,7 +119,7 @@ func (s *SkipList) Put(key []byte, seq uint64, kind keys.Kind, value []byte) (re
 		versions: []version{{
 			val:  bytes.Clone(value),
 			seq:  seq,
-			kind: keys.KindSet,
+			kind: config.KindSet,
 		}},
 
 		next: make([]*node, h)}
