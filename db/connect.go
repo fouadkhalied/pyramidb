@@ -2,10 +2,10 @@ package db
 
 import (
 	"fmt"
+	"lsmdb/internal/config"
 	"os"
 	"path/filepath"
 
-	"lsmdb/internal/keys"
 	"lsmdb/internal/memtable"
 	"lsmdb/internal/sstable"
 	"lsmdb/internal/wal"
@@ -16,7 +16,7 @@ func Open(dir string) (*DB, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db := &DB{dir: dir, mem: memtable.New(), memLimit: keys.MaxMemTableSizeInBytes}
+	db := &DB{dir: dir, mem: memtable.New(), memLimit: config.MaxMemTableSizeInBytes}
 
 	if err := db.recover(); err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (db *DB) recover() error {
 		return err
 	}
 	for i, f := range files {
-		good, maxSeq, err := wal.Replay(f, func(kind keys.Kind, seq uint64, key, value []byte) {
+		good, maxSeq, err := wal.Replay(f, func(kind config.Kind, seq uint64, key, value []byte) {
 			db.mem.Put(key, seq, kind, value)
 		})
 		if err != nil {

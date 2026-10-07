@@ -3,7 +3,7 @@ package db
 import (
 	"errors"
 	"fmt"
-	"lsmdb/internal/keys"
+	"lsmdb/internal/config"
 	"lsmdb/internal/wal"
 	"os"
 	"path/filepath"
@@ -136,7 +136,7 @@ func TestRotationKeepsOldDataReadable(t *testing.T) {
 func logKeys(t *testing.T, path string) []string {
 	t.Helper()
 	var out []string
-	_, _, err := wal.Replay(path, func(_ keys.Kind, _ uint64, key, _ []byte) {
+	_, _, err := wal.Replay(path, func(_ config.Kind, _ uint64, key, _ []byte) {
 		out = append(out, string(key))
 	})
 	if err != nil {

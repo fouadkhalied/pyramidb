@@ -1,6 +1,9 @@
 package db
 
-import "lsmdb/internal/keys"
+import (
+	"lsmdb/internal/config"
+	"lsmdb/internal/wal"
+)
 
 // Put follows the WAL protocol: seq, append + fsync, memtable, ack.
 func (db *DB) Put(key, value []byte) error {
@@ -10,7 +13,7 @@ func (db *DB) Put(key, value []byte) error {
 	db.seq++
 	db.requests <- request{
 		seq:   db.seq,
-		rec:   keys.Encode(keys.KindSet, db.seq, key, value),
+		rec:   wal.Encode(config.KindSet, db.seq, key, value),
 		key:   key,
 		value: value,
 		reply: reply,

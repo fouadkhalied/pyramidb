@@ -1,6 +1,8 @@
 package db
 
-import "lsmdb/internal/keys"
+import (
+	"lsmdb/internal/config"
+)
 
 type request struct {
 	seq        uint64
@@ -34,7 +36,7 @@ func (db *DB) writeLoop() {
 		}
 		if err == nil {
 			for _, r := range batch { // in order, only after the sync
-				db.mem.Put(r.key, r.seq, keys.KindSet, r.value)
+				db.mem.Put(r.key, r.seq, config.KindSet, r.value)
 			}
 
 			// Check once, after the WHOLE batch: a log and its memtable must
