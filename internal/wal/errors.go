@@ -1,4 +1,4 @@
-package keys
+package error
 
 import "errors"
 
