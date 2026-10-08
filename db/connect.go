@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"lsmdb/internal/memtable"
-	"lsmdb/internal/sstable"
 	"lsmdb/internal/wal"
 )
 
@@ -22,7 +21,7 @@ func Open(dir string) (*DB, error) {
 		return nil, err
 	}
 
-	db.sst = sstable.Init()
+	//db.sst = sstable.Init()
 
 	w, err := wal.Open(filepath.Join(dir, fmt.Sprintf("%06d.log", db.seq+1)))
 	if err != nil {
@@ -38,24 +37,25 @@ func Open(dir string) (*DB, error) {
 
 // rotate freezes the full memtable and starts a new memtable with a new log.
 // nextSeq must be (last seq of the batch just applied) + 1, so the new log's
-func (db *DB) rotate(nextSeq uint64) error {
+func (db *DB) rotate(nextSeq uint64) (frozenMem, error) {
 	// 1. Everything that can fail goes first. If it fails, nothing has changed.
 	w, err := wal.Open(filepath.Join(db.dir, fmt.Sprintf("%06d.log", nextSeq)))
 	if err != nil {
-		return err
+		return frozenMem{}, err
 	}
 
 	// 2. Swap all the state together, holding the lock only for pointer changes.
 	db.view.Lock()
 	old := db.wal
-	db.imm = append(db.imm, frozenMem{mem: db.mem, walPath: old.GetWriterPath()})
+	fm := frozenMem{mem: db.mem, walPath: old.GetWriterPath()} // built once, used twice
+	db.imm = append(db.imm, fm)
 	db.mem = memtable.New()
 	db.wal = w
 	db.view.Unlock()
 
-	// 3. Close the old log last. It was fsynced before this batch was applied,
-	// so nothing is lost; a close error cannot undo a rotation that worked.
-	return old.Close()
+	// 3. Close the old log last. It was fsynced before this batch was applied, so
+	_ = old.Close()
+	return fm, nil
 }
 
 // recover replays every log, oldest first, and trims a torn tail on the newest one.

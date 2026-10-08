@@ -43,7 +43,9 @@ func (db *DB) writeLoop() {
 			if db.mem.Size() >= db.memLimit {
 
 				// next batch will try again. The writes above are already durable.
-				_ = db.rotate(batch[len(batch)-1].seq + 1)
+				if fm, err := db.rotate(batch[len(batch)-1].seq + 1); err == nil {
+					db.flushCh <- fm
+				}
 			}
 		}
 

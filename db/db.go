@@ -33,7 +33,10 @@ type DB struct {
 	imm      []frozenMem  // frozen memtables, oldest first
 	memLimit int
 
-	sst      *sstable.SSTable
+	sst         *sstable.Writer
+	flushCh     chan frozenMem
+	flushChDone chan struct{}
+
 	requests chan request
 	done     chan struct{}
 }
