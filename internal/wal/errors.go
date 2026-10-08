@@ -1,4 +1,4 @@
-package error
+package wal
 
 import "errors"
 
