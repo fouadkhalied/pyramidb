@@ -118,9 +118,16 @@ func (db *DB) Close() error {
 		return nil
 	}
 	db.closed = true
-	close(db.requests)
+	close(db.requests) // 1. no new writes
 	db.mu.Unlock()
 
-	<-db.done
-	return db.wal.Close()
+	<-db.done         // 2. the write worker has stopped: nothing sends on flushCh any more
+	close(db.flushCh) // 3. tell the flusher no more memtables are coming
+	<-db.flushChDone  // 4. wait until it has finished everything already queued
+
+	err := db.closeTables() // 5. close the table files
+	if werr := db.wal.Close(); err == nil {
+		err = werr
+	}
+	return err
 }
