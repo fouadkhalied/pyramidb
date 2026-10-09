@@ -20,6 +20,15 @@ func mustOpen(t *testing.T, dir string) *DB {
 	return d
 }
 
+func mustOpenNoFlush(t *testing.T, dir string) *DB {
+	t.Helper()
+	d, err := open(dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
 func TestPutGet(t *testing.T) {
 	d := mustOpen(t, t.TempDir())
 	if _, err := d.Get([]byte("missing")); !errors.Is(err, ErrNotFound) {
