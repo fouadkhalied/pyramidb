@@ -63,6 +63,5 @@ func (m *MemTable) Size() int {
 	return m.size
 }
 
-// NewIterator is what flush will use. It takes no lock, so only iterate a
-// memtable that has been frozen (no more writes) — we'll formalize that later.
-func (m *MemTable) NewIterator() *Iterator { return m.list.NewIterator() }
+// NewEntryIterator is what flush will use. It takes no lock, so only iterate a
+func (m *MemTable) NewEntryIterator() *EntryIterator { return m.list.NewEntryIterator() }
