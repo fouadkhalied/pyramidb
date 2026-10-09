@@ -155,7 +155,7 @@ func logKeys(t *testing.T, path string) []string {
 
 func TestRotationStartsNewLog(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpenNoFlush(t, t.TempDir())
+	d := mustOpenNoFlush(t, dir)
 	d.memLimit = 1 // the very first write fills the memtable
 
 	if err := d.Put([]byte("a"), []byte("1")); err != nil {
@@ -189,7 +189,7 @@ func TestRotationStartsNewLog(t *testing.T) {
 
 func TestReopenAfterSeveralRotations(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpenNoFlush(t, t.TempDir())
+	d := mustOpenNoFlush(t, dir)
 	d.memLimit = 1 // every write rotates
 
 	const n = 6
