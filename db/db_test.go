@@ -19,7 +19,6 @@ func mustOpen(t *testing.T, dir string) *DB {
 	}
 	return d
 }
-
 func mustOpenNoFlush(t *testing.T, dir string) *DB {
 	t.Helper()
 	d, err := open(dir, true)

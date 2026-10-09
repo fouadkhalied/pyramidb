@@ -77,7 +77,7 @@ func TestOpenLoadsTablesAndRestoresSeq(t *testing.T) {
 // highest sequence number is the table's footer.
 func TestSeqComesFromTableFooterWhenLogsAreGone(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpen(t, dir)
+	d := mustOpenNoFlush(t, dir)
 	d.memLimit = 1 // every write rotates
 	_ = d.Put([]byte("a"), []byte("1"))
 	_ = d.Put([]byte("b"), []byte("2"))
@@ -105,7 +105,7 @@ func TestSeqComesFromTableFooterWhenLogsAreGone(t *testing.T) {
 // Crash between the rename and the log delete: the table AND its log both exist.
 func TestFinishedTableWithUndeletedLogIsHarmless(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpen(t, dir)
+	d := mustOpenNoFlush(t, dir)
 	d.memLimit = 1
 	_ = d.Put([]byte("a"), []byte("1"))
 	_ = d.Put([]byte("a"), []byte("2")) // a second version of the same key
