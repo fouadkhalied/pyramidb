@@ -11,27 +11,35 @@ import (
 )
 
 // Open recovers any existing logs into a fresh memtable, then starts a new log.
-func Open(dir string) (*DB, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+func Open(dir string) (*DB, error) { return open(dir, false) }
+
+func open(dir string, noFlush bool) (*DB, error) {
+	// ...
+	db := &DB{dir: dir, mem: memtable.New(), memLimit: config.MaxMemTableSizeInBytes, noFlush: noFlush}
+
+	// Tables first: they say how much of the logs is already durable.
+	if err := db.recoverTables(); err != nil {
 		return nil, err
 	}
-	db := &DB{dir: dir, mem: memtable.New(), memLimit: config.MaxMemTableSizeInBytes}
-
 	if err := db.recover(); err != nil {
+		db.closeTables()
 		return nil, err
 	}
-
-	//db.sst = sstable.Init()
 
 	w, err := wal.Open(filepath.Join(dir, fmt.Sprintf("%06d.log", db.seq+1)))
 	if err != nil {
+		db.closeTables()
 		return nil, err
 	}
 	db.wal = w
 
-	db.requests = make(chan request, 1024) // this DB's queue
+	db.flushCh = make(chan frozenMem, 2)
+	db.flushChDone = make(chan struct{})
+	go db.flushLoop()
+
+	db.requests = make(chan request, 1024)
 	db.done = make(chan struct{})
-	go db.writeLoop() // start only after recovery is finished
+	go db.writeLoop()
 	return db, nil
 }
 
@@ -66,6 +74,10 @@ func (db *DB) recover() error {
 	}
 	for i, f := range files {
 		good, maxSeq, err := wal.Replay(f, func(kind config.Kind, seq uint64, key, value []byte) {
+			if seq <= db.flushedSeq {
+				return // already inside a table: replaying it would duplicate the version
+			}
+
 			db.mem.Put(key, seq, kind, value)
 		})
 		if err != nil {
@@ -73,6 +85,14 @@ func (db *DB) recover() error {
 		}
 		if maxSeq > db.seq {
 			db.seq = maxSeq
+		}
+
+		if maxSeq > 0 && maxSeq <= db.flushedSeq {
+			// Crash between "table renamed" and "log deleted": finish the job.
+			if err := os.Remove(f); err != nil {
+				return err
+			}
+			continue
 		}
 
 		info, err := os.Stat(f)
