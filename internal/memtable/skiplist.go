@@ -119,7 +119,7 @@ func (s *SkipList) Put(key []byte, seq uint64, kind config.Kind, value []byte) (
 		versions: []version{{
 			val:  bytes.Clone(value),
 			seq:  seq,
-			kind: config.KindSet,
+			kind: kind,
 		}},
 
 		next: make([]*node, h)}
