@@ -37,6 +37,14 @@ type DB struct {
 	flushCh     chan frozenMem
 	flushChDone chan struct{}
 
+	tables []*sstable.Table
+	// Highest seq stored in any table. Everything <= this is already durable there,
+	// so recovery does not replay it (and deletes logs that hold only such records).
+	flushedSeq uint64
+	nextFile   uint64 // number of the next .sst file; only Open and the flusher touch it
+	bgErr      error  // first flush failure (guarded by view)
+	noFlush    bool   // tests only: leave frozen memtables in imm
+
 	requests chan request
 	done     chan struct{}
 }
