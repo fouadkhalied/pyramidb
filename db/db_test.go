@@ -110,7 +110,7 @@ func TestDamagedOlderLogFailsOpen(t *testing.T) {
 }
 
 func TestRotationKeepsOldDataReadable(t *testing.T) {
-	d := mustOpen(t, t.TempDir())
+	d := mustOpenNoFlush(t, t.TempDir())
 
 	keysIn := []string{"key-0", "key-1", "key-2", "key-3", "key-4"}
 	put := func(k string) {
@@ -155,7 +155,7 @@ func logKeys(t *testing.T, path string) []string {
 
 func TestRotationStartsNewLog(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpen(t, dir)
+	d := mustOpenNoFlush(t, t.TempDir())
 	d.memLimit = 1 // the very first write fills the memtable
 
 	if err := d.Put([]byte("a"), []byte("1")); err != nil {
@@ -189,7 +189,7 @@ func TestRotationStartsNewLog(t *testing.T) {
 
 func TestReopenAfterSeveralRotations(t *testing.T) {
 	dir := t.TempDir()
-	d := mustOpen(t, dir)
+	d := mustOpenNoFlush(t, t.TempDir())
 	d.memLimit = 1 // every write rotates
 
 	const n = 6
@@ -217,7 +217,7 @@ func TestReopenAfterSeveralRotations(t *testing.T) {
 
 // Under concurrent writes, batches form. Each log must still hold exactly the
 func TestEachLogMatchesItsMemtableUnderLoad(t *testing.T) {
-	d := mustOpen(t, t.TempDir())
+	d := mustOpenNoFlush(t, t.TempDir())
 	d.memLimit = 300
 
 	const writers, perWriter = 20, 25
