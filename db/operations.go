@@ -30,15 +30,30 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	db.mu.Unlock()
 
 	db.view.RLock()
-	mem, imm := db.mem, db.imm // one consistent view of the active + frozen memtables
+	mem, imm, tables := db.mem, db.imm, db.tables // one consistent view of the active + frozen memtables
 	db.view.RUnlock()
 
+	// check mem and imm first
 	if v, ok := mem.Get(key, snap); ok { // newest first
 		return v, nil
 	}
 	for i := len(imm) - 1; i >= 0; i-- {
 		if v, ok := imm[i].mem.Get(key, snap); ok {
 			return v, nil
+		}
+	}
+
+	// check sstables next
+	for _, t := range tables { // newest table first
+		e, ok, err := t.Get(key, snap)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			if e.Kind() == config.KindDelete {
+				return nil, ErrNotFound // a tombstone hides every older version
+			}
+			return e.Value, nil
 		}
 	}
 	return nil, ErrNotFound
